@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { Camera, Mail, User } from "lucide-react";
+import toast from "react-hot-toast";
+import uploadImage from "../utils/ImageUploader"; // Import the uploadImage utility
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
@@ -10,15 +12,30 @@ const ProfilePage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
 
+    // Generate preview for display
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImg(reader.result); // Set base64 for immediate preview
+    };
     reader.readAsDataURL(file);
 
-    reader.onload = async () => {
-      const base64Image = reader.result;
-      setSelectedImg(base64Image);
-      await updateProfile({ profilePic: base64Image });
-    };
+    // Upload image to Cloudinary
+    try {
+      const imageUrl = await uploadImage(file);
+      if (imageUrl) {
+        await updateProfile({ profilePic: imageUrl }); // Update profile with Cloudinary URL
+        setSelectedImg(imageUrl); // Update preview to Cloudinary URL
+      }
+    } catch (error) {
+      toast.error("Failed to upload image");
+      console.error("Image upload error:", error);
+      setSelectedImg(null); // Reset preview on failure
+    }
   };
 
   return (
@@ -101,4 +118,5 @@ const ProfilePage = () => {
     </div>
   );
 };
+
 export default ProfilePage;

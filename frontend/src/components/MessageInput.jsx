@@ -2,29 +2,48 @@ import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { Image, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
+import uploadImage from "../utils/ImageUploader"; // Import the uploadImage utility
 
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [imageFile, setImageFile] = useState(null); // Store the selected file
   const fileInputRef = useRef(null);
   const { sendMessage } = useChatStore();
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
+    if (!file) return;
+
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
 
+    setImageFile(file); // Store the file for upload
+
+    // Generate preview for display
     const reader = new FileReader();
     reader.onloadend = () => {
       setImagePreview(reader.result);
     };
     reader.readAsDataURL(file);
+
+    // Automatically upload the image to Cloudinary
+    try {
+      const imageUrl = await uploadImage(file);
+      if (imageUrl) {
+        setImagePreview(imageUrl); // Update preview to use the Cloudinary URL
+      }
+    } catch (error) {
+      toast.error("Failed to upload image");
+      console.error("Image upload error:", error);
+    }
   };
 
   const removeImage = () => {
     setImagePreview(null);
+    setImageFile(null); // Clear the file
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -33,17 +52,30 @@ const MessageInput = () => {
     if (!text.trim() && !imagePreview) return;
 
     try {
+      let imageUrl = imagePreview;
+      
+      // If there's an image file and no Cloudinary URL yet, upload it
+      if (imageFile && !imagePreview.startsWith("http")) {
+        imageUrl = await uploadImage(imageFile);
+        if (!imageUrl) {
+          toast.error("Failed to upload image");
+          return;
+        }
+      }
+
       await sendMessage({
         text: text.trim(),
-        image: imagePreview,
+        image: imageUrl && imageUrl.startsWith("http") ? imageUrl : null, // Send only Cloudinary URL
       });
 
       // Clear form
       setText("");
       setImagePreview(null);
+      setImageFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       console.error("Failed to send message:", error);
+      toast.error("Failed to send message");
     }
   };
 
@@ -106,4 +138,5 @@ const MessageInput = () => {
     </div>
   );
 };
+
 export default MessageInput;
